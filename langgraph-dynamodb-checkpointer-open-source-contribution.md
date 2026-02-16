@@ -192,17 +192,10 @@ For checkpoint reads, this implementation uses strongly consistent reads (Consis
 
 ```from langgraph.checkpoint.dynamodb import DynamoDBSaver
 
-# NOTE: constructor args are positional in this implementation
-saver = DynamoDBSaver(
-    "checkpoints",
-    "writes",
-    region_name="us-east-1",
-    ttl_seconds=3600,
-)
+saver = DynamoDBSaver("checkpoints", "writes", region_name="us-east-1", ttl_seconds=3600)
 
-config = {"configurable": {"thread_id": "thread-1"}}
-
-checkpoint = {
+cfg = {"configurable": {"thread_id": "t1"}}
+ckpt = {
     "id": "c1",
     "v": 1,
     "ts": "2025-01-01T00:00:00Z",
@@ -210,23 +203,19 @@ checkpoint = {
     "channel_versions": {},
     "versions_seen": {},
 }
-metadata = {"source": "example", "step": -1, "parents": {}}
+meta = {"source": "input", "step": -1, "parents": {}}
 
-# put() requires new_versions
-updated_config = saver.put(config, checkpoint, metadata, new_versions={})
+cfg2 = saver.put(cfg, ckpt, meta, new_versions={})
+latest = saver.get({"configurable": {"thread_id": "t1"}})
 
-latest = saver.get({"configurable": {"thread_id": "thread-1"}})
-
-writes = [("channel_1", {"value": 123}), ("channel_2", {"value": "abc"})]
-
-# put_writes() requires checkpoint_id + task_id (and typically checkpoint_ns)
 saver.put_writes(
-    {"configurable": {"thread_id": "thread-1", "checkpoint_id": "c1", "checkpoint_ns": "0"}},
-    writes,
+    {"configurable": {"thread_id": "t1", "checkpoint_id": "c1", "checkpoint_ns": "0"}},
+    [("log", {"ok": True}), ("state", {"x": 1})],
     task_id="task-1",
 )
 
-saver.delete_thread("thread-1")
+saver.delete_thread("t1")
+
 
 ```
 
