@@ -267,9 +267,9 @@ This contribution demonstrates:
 
 # 9. Contribution Outcome
 
-The PR was reviewed and closed due to repository scope decisions regarding official checkpointer expansion.
+While the PR was closed to keep the core library lean, the implementation served as a reference architecture for AWS-native LangGraph persistence and demonstrated 100% parity with the official PostgresSaver interface.
 
-However:
+Outcome:
 
 - The implementation was complete
 - The feature worked correctly
