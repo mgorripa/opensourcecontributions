@@ -190,7 +190,8 @@ For checkpoint reads, this implementation uses strongly consistent reads (Consis
 
 # 6. Usage Example
 
-```from langgraph.checkpoint.dynamodb import DynamoDBSaver
+```
+from langgraph.checkpoint.dynamodb import DynamoDBSaver
 
 saver = DynamoDBSaver("checkpoints", "writes", region_name="us-east-1", ttl_seconds=3600)
 
