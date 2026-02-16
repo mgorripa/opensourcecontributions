@@ -177,14 +177,14 @@ Important note: DynamoDB TTL is eventual, not immediate.
 ## Batch Write Handling
 
 - Automatic chunking (≤ 25 items)
-- Retry handling for unprocessed items
+- Writes are chunked into batches of ≤25 items (DynamoDB limit). This implementation does a single batch write per chunk and does not currently retry UnprocessedItems. Adding a retry loop with exponential backoff would improve reliability.
 - Transparent to caller
 
 ---
 
 ## Consistency Model
 
-For checkpoint reads, this implementation uses strongly consistent reads (ConsistentRead=True) to reduce stale reads when fetching by thread_id / checkpoint_id or when fetching the latest checkpoint.
+For checkpoint reads, this implementation uses strongly consistent reads (ConsistentRead=True) to reduce the likelihood of stale data when retrieving checkpoints. DynamoDB still defaults to eventual consistency for other operations unless overridden.
 
 ---
 
@@ -193,10 +193,11 @@ For checkpoint reads, this implementation uses strongly consistent reads (Consis
 ```
 from langgraph.checkpoint.dynamodb import DynamoDBSaver
 
+# Initialize with positional table names
 saver = DynamoDBSaver("checkpoints", "writes", region_name="us-east-1", ttl_seconds=3600)
 
-cfg = {"configurable": {"thread_id": "t1"}}
-ckpt = {
+config = {"configurable": {"thread_id": "thread-1"}}
+checkpoint = {
     "id": "c1",
     "v": 1,
     "ts": "2025-01-01T00:00:00Z",
@@ -204,19 +205,23 @@ ckpt = {
     "channel_versions": {},
     "versions_seen": {},
 }
-meta = {"source": "input", "step": -1, "parents": {}}
+metadata = {"source": "example", "step": -1, "parents": {}}
 
-cfg2 = saver.put(cfg, ckpt, meta, new_versions={})
-latest = saver.get({"configurable": {"thread_id": "t1"}})
+# Include required new_versions
+updated_config = saver.put(config, checkpoint, metadata, new_versions={})
 
+# Fetch latest
+latest = saver.get({"configurable": {"thread_id": "thread-1"}})
+
+# For put_writes, include checkpoint_id + checkpoint_ns & provide task_id
 saver.put_writes(
-    {"configurable": {"thread_id": "t1", "checkpoint_id": "c1", "checkpoint_ns": "0"}},
-    [("log", {"ok": True}), ("state", {"x": 1})],
+    {"configurable": {"thread_id": "thread-1", "checkpoint_id": "c1", "checkpoint_ns": "0"}},
+    [("channel_1", {"value": 123}), ("channel_2", {"value": "abc"})],
     task_id="task-1",
 )
 
-saver.delete_thread("t1")
-
+# Delete thread
+saver.delete_thread("thread-1")
 
 ```
 
