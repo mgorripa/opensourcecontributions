@@ -81,6 +81,7 @@ The runtime flow:
 
 - **Partition Key:** `thread_id_checkpoint_id_checkpoint_ns`
 - **Sort Key:** `task_id_idx`
+- **PK value format:** `f"{thread_id}:{checkpoint_id}:{checkpoint_ns}"` (colon-separated).
 - Attributes:
   - `channel`
   - `value`
@@ -127,7 +128,7 @@ Key implementation detail:
 
 - DynamoDB limits batch writes to **25 items**
 - Writes are chunked automatically
-- Retries are performed for unprocessed items
+- Writes are chunked into batches of ≤25 items (DynamoDB limit).
 
 This shields users from underlying DynamoDB constraints.
 
@@ -183,40 +184,50 @@ Important note: DynamoDB TTL is eventual, not immediate.
 
 ## Consistency Model
 
-By default, DynamoDB provides eventual consistency.  
-Strongly consistent reads could be configured if required for multi-worker workflows.
+For checkpoint reads, this implementation uses strongly consistent reads (ConsistentRead=True) to reduce stale reads when fetching by thread_id / checkpoint_id or when fetching the latest checkpoint.
 
 ---
 
 # 6. Usage Example
 
-```python
-from langgraph.checkpoint.dynamodb import DynamoDBSaver
+```from langgraph.checkpoint.dynamodb import DynamoDBSaver
 
+# NOTE: constructor args are positional in this implementation
 saver = DynamoDBSaver(
-    table_name="checkpoints",
-    writes_table_name="writes",
+    "checkpoints",
+    "writes",
     region_name="us-east-1",
-    ttl_seconds=3600
+    ttl_seconds=3600,
 )
 
 config = {"configurable": {"thread_id": "thread-1"}}
 
-checkpoint = {"state": {"step": 1}}
-metadata = {"source": "example"}
+checkpoint = {
+    "id": "c1",
+    "v": 1,
+    "ts": "2025-01-01T00:00:00Z",
+    "channel_values": {},
+    "channel_versions": {},
+    "versions_seen": {},
+}
+metadata = {"source": "example", "step": -1, "parents": {}}
 
-updated_config = saver.put(config, checkpoint, metadata)
+# put() requires new_versions
+updated_config = saver.put(config, checkpoint, metadata, new_versions={})
 
-latest = saver.get(config)
+latest = saver.get({"configurable": {"thread_id": "thread-1"}})
 
-writes = [
-    ("channel_1", {"value": 123}),
-    ("channel_2", {"value": "abc"})
-]
+writes = [("channel_1", {"value": 123}), ("channel_2", {"value": "abc"})]
 
-saver.put_writes(config, writes)
+# put_writes() requires checkpoint_id + task_id (and typically checkpoint_ns)
+saver.put_writes(
+    {"configurable": {"thread_id": "thread-1", "checkpoint_id": "c1", "checkpoint_ns": "0"}},
+    writes,
+    task_id="task-1",
+)
 
 saver.delete_thread("thread-1")
+
 ```
 
 ---
